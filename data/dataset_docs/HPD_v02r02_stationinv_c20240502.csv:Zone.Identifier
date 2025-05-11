@@ -1,0 +1,4 @@
+[ZoneTransfer]
+ZoneId=3
+ReferrerUrl=https://www.ncei.noaa.gov/data/coop-hourly-precipitation/v2/station-inventory/
+HostUrl=https://www.ncei.noaa.gov/data/coop-hourly-precipitation/v2/station-inventory/HPD_v02r02_stationinv_c20240502.csv
