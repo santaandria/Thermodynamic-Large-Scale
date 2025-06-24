@@ -12,7 +12,7 @@ import json
 DATA_DOC_PATH = Path("./data/dataset_docs/")
 MERGED_OE_PATH = Path("./data/OE_tmean_era5/")
 
-OUTPUT_PATH = Path("./output/")
+OUTPUT_PATH = Path("./output/scaling_analysis/")
 OUTPUT_PATH.mkdir(parents=True, exist_ok=True)
 
 stations_df = pd.read_csv(DATA_DOC_PATH / "pt_stations_ge30y_80pct_good.csv")
