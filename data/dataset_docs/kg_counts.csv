@@ -1,18 +1,18 @@
-KG,count
-"Cfa - Temperate, no dry season, hot summer",184
-"Dfa - Cold, no dry season, hot summer",183
-"BSk - Arid, steppe, cold",149
-"Dfb - Cold, no dry season, warm summer",80
-"BWk - Arid, desert, cold",28
-"Csb - Temperate, dry summer, warm summer",27
-"Dsb - Cold, dry summer, warm summer",17
-"Csa - Temperate, dry summer, hot summer",12
-"BSh - Arid, steppe, hot",7
-"Dfc - Cold, no dry season, cold summer",5
-"Dwa - Cold, dry winter, hot summer",5
-"BWh - Arid, desert, hot",4
-"Dwb - Cold, dry winter, warm summer",3
-"Dsc - Cold, dry summer, cold summer",2
-"Cfb - Temperate, no dry season, warm summer",2
-"Dsa - Cold, dry summer, hot summer",1
-"Aw - Tropical, savannah",1
+KG,count,Description
+25,172,"Dfa - Cold, no dry season, hot summer"
+14,168,"Cfa - Temperate, no dry season, hot summer"
+7,137,"BSk - Arid, steppe, cold"
+26,74,"Dfb - Cold, no dry season, warm summer"
+5,27,"BWk - Arid, desert, cold"
+9,27,"Csb - Temperate, dry summer, warm summer"
+18,17,"Dsb - Cold, dry summer, warm summer"
+8,12,"Csa - Temperate, dry summer, hot summer"
+21,5,"Dwa - Cold, dry winter, hot summer"
+27,5,"Dfc - Cold, no dry season, cold summer"
+6,5,"BSh - Arid, steppe, hot"
+22,3,"Dwb - Cold, dry winter, warm summer"
+4,3,"BWh - Arid, desert, hot"
+19,2,"Dsc - Cold, dry summer, cold summer"
+0,2,
+15,2,"Cfb - Temperate, no dry season, warm summer"
+17,1,"Dsa - Cold, dry summer, hot summer"
