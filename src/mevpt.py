@@ -1,6 +1,18 @@
-###########################
-# Author: Santa Andria #
-###########################
+"""
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                                                                              ║
+║  ░█▀▀░█▀█░█▀█░▀█▀░█▀█░░░█▀█░█▀█░█▀▄░█▀▄░▀█▀░█▀█                              ║
+║  ░▀▀█░█▀█░█░█░░█░░█▀█░░░█▀█░█░█░█░█░█▀▄░░█░░█▀█                              ║
+║  ░▀▀▀░▀░▀░▀░▀░░▀░░▀░▀░░░▀░▀░▀░▀░▀▀░░▀░▀░▀▀▀░▀░▀                              ║
+║                                                                              ║
+║  ┌─────────────────────────────────────────────────────────────────────────┐ ║
+║  │  Author: Santa Andria                                                   │ ║
+║  │  Email:  santa.andria@dicea.unipd.it                                    │ ║
+║  └─────────────────────────────────────────────────────────────────────────┘ ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+
 import pandas as pd
 import numpy as np
 from scipy.special import gamma
@@ -155,11 +167,13 @@ def load_data(stn_id, d, data_dir):
         data_dir / d / (stn_id + ".csv"), index_col=0, parse_dates=True
     ).dropna()
 
-    mask = (
-        (df["PRCP"] >= 0.254)
-        if "DPT" in df.columns
-        else (df["PRCP"] >= 0.254) & (df["TMEAN"] >= 2)
-    )
+    # mask = (
+    #     (df["PRCP"] >= 0.254)
+    #     if "DPT" in df.columns
+    #     else (df["PRCP"] >= 0.254) & (df["TMEAN"] >= 2)
+    # )
+    mask = df["PRCP"] >= 0.254
+
     df = df.loc[mask]
 
     if d == "24h":
@@ -197,20 +211,218 @@ def w_T(T, w0, beta_w):
 
 
 def neg_log_likelihood_wT(params, x, T):
+    """Negative log-likelihood with both parameters temperature-dependent"""
     c0, beta_c, w0, beta_w = params
+
+    # Add small epsilon to prevent parameters from being exactly zero
+    eps = 1e-12
+    c0 = max(c0, eps)
+    w0 = max(w0, eps)
+
     ct = c_T(T, c0, beta_c)
     wt = w_T(T, w0, beta_w)
-    log_likelihood = (
-        np.log(wt) - np.log(ct) + (wt - 1) * np.log(x / ct) - (x / ct) ** wt
-    )
-    return -np.sum(log_likelihood)
+
+    # Ensure ct and wt are positive
+    ct = np.maximum(ct, eps)
+    wt = np.maximum(wt, eps)
+
+    # Ensure x is positive (additional safety check)
+    x = np.maximum(x, eps)
+
+    # Calculate log-likelihood components with numerical stability
+    try:
+        # Log terms
+        log_wt = np.log(wt)
+        log_ct = np.log(ct)
+
+        # Ratio x/ct with clipping to prevent extreme values
+        x_over_ct = np.clip(x / ct, eps, 1e10)
+        log_x_over_ct = np.log(x_over_ct)
+
+        # Power term with clipping to prevent overflow
+        power_term = np.clip(x_over_ct**wt, eps, 1e100)
+
+        # Calculate log-likelihood
+        log_likelihood = log_wt - log_ct + (wt - 1) * log_x_over_ct - power_term
+
+        # # Check for invalid values
+        # if not np.all(np.isfinite(log_likelihood)):
+        #     return 1e10  # Return large penalty for invalid values
+
+        return -np.sum(log_likelihood)
+
+    except (OverflowError, ZeroDivisionError, ValueError):
+        return 1e10  # Return large penalty for numerical errors
 
 
 def neg_log_likelihood_w_const(params, x, T):
-    A, b, w = params
-    ct = c_T(T, A, b)
-    log_likelihood = np.log(w) - np.log(ct) + (w - 1) * np.log(x / ct) - (x / ct) ** w
-    return -np.sum(log_likelihood)
+    """Negative log-likelihood with constant shape parameter"""
+    c0, beta_c, w = params
+
+    # Add small epsilon to prevent parameters from being exactly zero
+    eps = 1e-12
+    c0 = max(c0, eps)
+    w = max(w, eps)
+
+    ct = c_T(T, c0, beta_c)
+    ct = np.maximum(ct, eps)
+
+    # Ensure x is positive
+    x = np.maximum(x, eps)
+
+    try:
+        # Log terms
+        log_w = np.log(w)
+        log_ct = np.log(ct)
+
+        # Ratio x/ct with clipping
+        x_over_ct = np.clip(x / ct, eps, 1e10)
+        log_x_over_ct = np.log(x_over_ct)
+
+        # Power term with clipping
+        power_term = np.clip(x_over_ct**w, eps, 1e100)
+
+        # Calculate log-likelihood
+        log_likelihood = log_w - log_ct + (w - 1) * log_x_over_ct - power_term
+
+        # Check for invalid values
+        if not np.all(np.isfinite(log_likelihood)):
+            return 1e10
+
+        return -np.sum(log_likelihood)
+
+    except (OverflowError, ZeroDivisionError, ValueError):
+        return 1e10
+
+
+def exponential_reg_ML(
+    sample,
+    temp,
+    initial_guess=None,
+    wt=True,
+    return_aic=False,
+    max_iter=1000,
+    tolerance=1e-8,
+):
+    """
+    Fit Weibull distribution with temperature-dependent parameters using ML
+
+    Parameters:
+    -----------
+    sample : array-like
+        Sample data
+    temp : array-like
+        Temperature data
+    initial_guess : list, optional
+        Initial parameter guess
+    wt : bool
+        If True, shape parameter is temperature-dependent
+    return_aic : bool
+        If True, return AIC along with parameters
+    max_iter : int
+        Maximum iterations for optimization
+    tolerance : float
+        Convergence tolerance
+    """
+
+    # Filter positive samples and corresponding temperatures
+    mask = sample > 0
+    x = sample[mask]
+    T = temp[mask]
+
+    if len(x) == 0:
+        raise ValueError("No positive samples found")
+
+    # Suppress specific warnings during optimization
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=RuntimeWarning)
+
+        if wt:
+            # Both parameters temperature-dependent
+            if initial_guess is None:
+                # More conservative initial guess
+                initial_guess = [np.mean(x), 0.01, 1.2, -0.001]
+
+            # Tighter bounds to prevent extreme parameter values
+            bnds = ((1e-6, 1e6), (-1, 1), (1e-6, 10), (-1, 1))
+
+            # Try multiple optimization methods
+            methods = ["L-BFGS-B", "TNC", "SLSQP"]
+            best_result = None
+            best_nll = np.inf
+
+            for method in methods:
+                try:
+                    result = minimize(
+                        neg_log_likelihood_wT,
+                        initial_guess,
+                        args=(x, T),
+                        method=method,
+                        bounds=bnds,
+                    )
+
+                    if result.success and result.fun < best_nll:
+                        best_result = result
+                        best_nll = result.fun
+
+                except Exception as e:
+                    continue
+
+            if best_result is None:
+                raise RuntimeError("Optimization failed for all methods")
+
+            result = best_result
+            c0, beta_c, w0, beta_w = result.x
+
+            cw_reg = {
+                "c0": c0,
+                "beta_c": beta_c,
+                "w0": w0,
+                "beta_w": beta_w,
+            }
+
+            if return_aic:
+                k = len(initial_guess)
+                nll = neg_log_likelihood_wT(result.x, x, T)
+
+        else:
+            # Constant shape parameter
+            if initial_guess is None:
+                initial_guess = [np.mean(x), 0.01, 1.2]
+
+            bnds = ((1e-6, 1e6), (-1, 1), (1e-6, 10))
+
+            result = minimize(
+                neg_log_likelihood_w_const,
+                initial_guess,
+                args=(x, T),
+                method="L-BFGS-B",
+                bounds=bnds,
+                options={"maxiter": max_iter, "ftol": tolerance},
+            )
+
+            if not result.success:
+                raise RuntimeError(f"Optimization failed: {result.message}")
+
+            c0, beta_c, w = result.x
+
+            # Fixed: Use correct variable names for constant w case
+            cw_reg = {
+                "c0": c0,
+                "beta_c": beta_c,
+                "w0": w,  # For constant case, store as 'w0':w, 'beta_w': 0 for ease of plotting
+                "beta_w": 0,
+            }
+
+            if return_aic:
+                k = len(initial_guess)
+                nll = neg_log_likelihood_w_const(result.x, x, T)
+
+    if return_aic:
+        aic = 2 * k + 2 * nll
+        return cw_reg, aic
+    else:
+        return cw_reg
 
 
 def T_histogram(T_bins, temp_data, pmf=True, ax=None):
@@ -236,60 +448,6 @@ def wei_cond_cdf_varying(x, T, cw_reg, c=None, w=None):
     )
     x = np.maximum(x, 0)  # To avoid error during optimization (in mev_PT_cdf)
     return 1 - np.exp(-((x / ct) ** wt))
-
-
-def exponential_reg_ML(sample, temp, initial_guess=None, wt=True, return_aic=False):
-    """wt=True refers to the case where w is assume to be a function of temperature"""
-    x = sample[sample > 0]
-    T = temp[sample > 0]
-    if wt:
-        initial_guess = (
-            [2.5, 0.07, 1.5, -0.02] if initial_guess is None else initial_guess
-        )
-        # initial_guess = [1, 0.01, 1, -0.001]
-        bnds = ((0, None), (None, None), (0, None), (None, None))
-        result = minimize(
-            neg_log_likelihood_wT,
-            initial_guess,
-            args=(x, T),
-            method="Nelder-Mead",
-            bounds=bnds,
-        )
-        c0, beta_c, w0, beta_w = result.x
-        cw_reg = {
-            "c0": c0,
-            "beta_c": beta_c,
-            "w0": w0,
-            "beta_w": beta_w,
-        }
-        if return_aic:
-            k = len(initial_guess)
-            nll = neg_log_likelihood_wT(result.x, x, T)
-    else:
-        initial_guess = [2.5, 0.07, 1.5] if initial_guess is None else initial_guess
-        bnds = ((0, None), (None, None), (0, None))
-        result = minimize(
-            neg_log_likelihood_w_const,
-            initial_guess,
-            args=(x, T),
-            method="L-BFGS-B",
-            bounds=bnds,
-        )
-        c0, beta_c, w = result.x
-        cw_reg = {
-            "c0": c0,
-            "beta_c": beta_c,
-            "w0": w,
-            "beta_w": 0,
-        }
-        if return_aic:
-            k = len(initial_guess)
-            nll = neg_log_likelihood_w_const(result.x, x, T)
-    if return_aic:
-        aic = 2 * k + 2 * nll
-        return cw_reg, aic
-    else:
-        return cw_reg
 
 
 def mev_PT_cdf(x, T_midbin, T_freq, n_mean, wei_cond_cdf):
@@ -550,6 +708,9 @@ def mev_PT_bootstrap_ci(df, var, Fi_val, ntimes=1000, confidence_level=0.95):
     # Remove failed iterations
     valid_mask = ~np.isnan(QM).any(axis=1)
     QM_valid = QM[valid_mask, :]
+
+    physical_outliers = np.any(QM_valid > 1000, axis=1)
+    QM_valid = QM_valid[~physical_outliers, :]
 
     print(
         f"\nBootstrap completed: {successful_iterations}/{ntimes} successful iterations"
