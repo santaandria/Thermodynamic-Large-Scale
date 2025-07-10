@@ -2,5 +2,8 @@ src/mplstyle.py
 data/OE_tmean_era5/
 data/OE_dpt_era5/
 data/shp/
+data/archive/
 output/
 notebooks/archive
+src/__pycache__
+.vscode/
